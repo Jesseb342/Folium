@@ -27,8 +27,9 @@ jobs:
           import os, re, subprocess, sys, glob
 
           ws = os.environ["GITHUB_WORKSPACE"]
-          org = "https://github.com/folium-app"
+          orgs = ["folium-app", "official-antique", "jarrodnorwell"]
           seen = set()
+          failed = []
 
           def refs():
               found = set()
@@ -63,10 +64,22 @@ jobs:
                   if os.path.exists(dest):
                       continue
                   print("cloning", name, "->", dest)
-                  r = subprocess.run(["git", "clone", "--depth", "1", "--recursive",
-                                      f"{org}/{name}", dest])
-                  if r.returncode != 0:
-                      print(f"::warning::could not clone {org}/{name}")
+                  ok = False
+                  for o in orgs:
+                      env = dict(os.environ, GIT_TERMINAL_PROMPT="0")
+                      r = subprocess.run(["git", "clone", "--depth", "1", "--recursive",
+                                          f"https://github.com/{o}/{name}", dest], env=env)
+                      if r.returncode == 0:
+                          print(f"cloned {o}/{name}")
+                          ok = True
+                          break
+                  if not ok:
+                      failed.append(name)
+
+          print("local package paths found:", sorted(seen))
+          if failed:
+              print(f"::error::could not clone: {failed}")
+              sys.exit(1)
           PY
           ls -la "$GITHUB_WORKSPACE/.."
 
