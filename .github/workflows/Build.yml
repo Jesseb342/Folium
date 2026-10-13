@@ -107,13 +107,21 @@ jobs:
       # Boost headers (fusion, spirit, phoenix), which aren't in the checkout.
       - name: Install Boost and Vulkan headers
         run: |
-          brew install boost vulkan-headers
-          BOOST_INC="$(brew --prefix boost)/include"
-          VK_INC="$(brew --prefix vulkan-headers)/include"
-          ls "$BOOST_INC/boost/fusion/include/adapt_struct.hpp"
-          ls "$VK_INC/vulkan/vulkan.hpp"
-          echo "BOOST_INC=$BOOST_INC" >> "$GITHUB_ENV"
-          echo "VK_INC=$VK_INC" >> "$GITHUB_ENV"
+          FORMULAE="boost vulkan-headers vulkan-memory-allocator glslang spirv-headers"
+          brew install $FORMULAE
+          SPACE=""
+          COLON=""
+          for f in $FORMULAE; do
+            inc="$(brew --prefix $f)/include"
+            [ -d "$inc" ] && SPACE="$SPACE $inc" && COLON="$COLON:$inc"
+          done
+          echo "include dirs:$SPACE"
+          ls "$(brew --prefix boost)/include/boost/fusion/include/adapt_struct.hpp"
+          ls "$(brew --prefix vulkan-headers)/include/vulkan/vulkan.hpp"
+          ls "$(brew --prefix vulkan-memory-allocator)/include/vk_mem_alloc.h"
+          echo "EXTRA_INC=$SPACE" >> "$GITHUB_ENV"
+          echo "EXTRA_INC_COLON=${COLON#:}" >> "$GITHUB_ENV"
+          echo "EXTRA_ISYSTEM=$(for d in $SPACE; do printf -- '-isystem %s ' $d; done)" >> "$GITHUB_ENV"
 
       - name: Archive (unsigned)
         run: |
@@ -127,15 +135,15 @@ jobs:
             -archivePath build/Folium.xcarchive \
             -skipPackagePluginValidation \
             -skipMacroValidation \
-            HEADER_SEARCH_PATHS="\$(inherited) $BOOST_INC $VK_INC" \
-            OTHER_CPLUSPLUSFLAGS="\$(inherited) -isystem $BOOST_INC -isystem $VK_INC" \
+            HEADER_SEARCH_PATHS="\$(inherited) $EXTRA_INC" \
+            OTHER_CPLUSPLUSFLAGS="\$(inherited) $EXTRA_ISYSTEM" \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             | tee build/xcodebuild.log
         env:
           NSUnbufferedIO: YES
-          CPLUS_INCLUDE_PATH: ${{ env.BOOST_INC }}:${{ env.VK_INC }}
+          CPLUS_INCLUDE_PATH: ${{ env.EXTRA_INC_COLON }}
 
       - name: Show compile errors
         if: failure()
