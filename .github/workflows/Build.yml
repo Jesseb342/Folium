@@ -122,6 +122,11 @@ jobs:
         env:
           NSUnbufferedIO: YES
 
+      - name: Show compile errors
+        if: failure()
+        run: |
+          grep -n -B1 -A6 "error:" build/xcodebuild.log | head -200 || true
+
       - name: Verify archive exists
         run: ls -R build/Folium.xcarchive/Products/Applications
 
