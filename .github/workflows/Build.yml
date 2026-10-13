@@ -107,20 +107,29 @@ jobs:
       # Boost headers (fusion, spirit, phoenix), which aren't in the checkout.
       - name: Install Boost and Vulkan headers
         run: |
-          FORMULAE="boost vulkan-headers vulkan-memory-allocator glslang spirv-headers"
+          FORMULAE="boost vulkan-headers glslang spirv-headers"
           brew install $FORMULAE
-          SPACE=""
-          COLON=""
+
+          # Vulkan Memory Allocator is a single header and has no Homebrew formula
+          git clone --depth 1 --branch v3.1.0 \
+            https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator \
+            "$RUNNER_TEMP/vma"
+
+          SPACE="$RUNNER_TEMP/vma/include"
+          COLON="$RUNNER_TEMP/vma/include"
           for f in $FORMULAE; do
             inc="$(brew --prefix $f)/include"
-            [ -d "$inc" ] && SPACE="$SPACE $inc" && COLON="$COLON:$inc"
+            if [ -d "$inc" ]; then
+              SPACE="$SPACE $inc"
+              COLON="$COLON:$inc"
+            fi
           done
-          echo "include dirs:$SPACE"
+          echo "include dirs: $SPACE"
           ls "$(brew --prefix boost)/include/boost/fusion/include/adapt_struct.hpp"
           ls "$(brew --prefix vulkan-headers)/include/vulkan/vulkan.hpp"
-          ls "$(brew --prefix vulkan-memory-allocator)/include/vk_mem_alloc.h"
+          ls "$RUNNER_TEMP/vma/include/vk_mem_alloc.h"
           echo "EXTRA_INC=$SPACE" >> "$GITHUB_ENV"
-          echo "EXTRA_INC_COLON=${COLON#:}" >> "$GITHUB_ENV"
+          echo "EXTRA_INC_COLON=$COLON" >> "$GITHUB_ENV"
           echo "EXTRA_ISYSTEM=$(for d in $SPACE; do printf -- '-isystem %s ' $d; done)" >> "$GITHUB_ENV"
 
       - name: Archive (unsigned)
@@ -180,4 +189,3 @@ jobs:
           name: build-log
           path: build/xcodebuild.log
           if-no-files-found: ignore
-
