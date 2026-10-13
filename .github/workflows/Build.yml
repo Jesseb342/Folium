@@ -7,7 +7,7 @@ on:
 
 jobs:
   build:
-    runs-on: macos-latest
+    runs-on: xcode-27
     timeout-minutes: 120
 
     steps:
@@ -16,10 +16,8 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Select latest stable Xcode
-        uses: maxim-lobanov/setup-xcode@v1
-        with:
-          xcode-version: latest-stable
+      - name: Show Xcode version
+        run: xcodebuild -version
 
       - name: List schemes (for debugging)
         run: xcodebuild -list -project Folium.xcodeproj
