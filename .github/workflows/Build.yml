@@ -19,8 +19,76 @@ jobs:
       - name: Show Xcode version
         run: xcodebuild -version
 
-      - name: List schemes (for debugging)
+      # The project references local Swift packages that live next to the repo
+      # (e.g. ../AntiqueKit). Clone any that are missing from the folium-app org.
+      - name: Fetch sibling local packages
+        run: |
+          python3 - <<'PY'
+          import os, re, subprocess, sys, glob
+
+          ws = os.environ["GITHUB_WORKSPACE"]
+          org = "https://github.com/folium-app"
+          seen = set()
+
+          def refs():
+              found = set()
+              files = [os.path.join(ws, "Folium.xcodeproj", "project.pbxproj")]
+              files += glob.glob(os.path.join(ws, "..", "*", "Package.swift"))
+              files += glob.glob(os.path.join(ws, "**", "Package.swift"), recursive=True)
+              for f in files:
+                  if not os.path.isfile(f):
+                      continue
+                  base = os.path.dirname(f) if f.endswith("Package.swift") else ws
+                  txt = open(f, errors="ignore").read()
+                  for m in re.findall(r'relativePath\s*=\s*"?([^";]+)"?;', txt):
+                      found.add(os.path.normpath(os.path.join(base, m.strip())))
+                  for m in re.findall(r'path:\s*"(\.\./[^"]+)"', txt):
+                      found.add(os.path.normpath(os.path.join(base, m)))
+              return found
+
+          for _ in range(5):
+              new = [p for p in refs() if p not in seen]
+              if not new:
+                  break
+              for p in new:
+                  seen.add(p)
+                  if os.path.exists(p):
+                      continue
+                  parent = os.path.normpath(os.path.join(ws, ".."))
+                  if not p.startswith(parent + os.sep):
+                      print("skipping outside path", p)
+                      continue
+                  name = os.path.relpath(p, parent).split(os.sep)[0]
+                  dest = os.path.join(parent, name)
+                  if os.path.exists(dest):
+                      continue
+                  print("cloning", name, "->", dest)
+                  r = subprocess.run(["git", "clone", "--depth", "1", "--recursive",
+                                      f"{org}/{name}", dest])
+                  if r.returncode != 0:
+                      print(f"::warning::could not clone {org}/{name}")
+          PY
+          ls -la "$GITHUB_WORKSPACE/.."
+
+      - name: List schemes
         run: xcodebuild -list -project Folium.xcodeproj
+
+      - name: Pick scheme
+        id: scheme
+        run: |
+          python3 - <<'PY'
+          import json, os, subprocess
+          out = subprocess.run(["xcodebuild", "-list", "-json", "-project", "Folium.xcodeproj"],
+                               capture_output=True, text=True).stdout
+          schemes = json.loads(out[out.index("{"):])["project"]["schemes"]
+          print("schemes:", schemes)
+          pick = next((s for s in schemes if s == "Folium-iOS"), None) \
+              or next((s for s in schemes if "ios" in s.lower()), None) \
+              or next((s for s in schemes if s == "Folium"), None) \
+              or schemes[0]
+          print("using:", pick)
+          open(os.environ["GITHUB_OUTPUT"], "a").write(f"name={pick}\n")
+          PY
 
       - name: Archive (unsigned)
         run: |
@@ -28,10 +96,12 @@ jobs:
           mkdir -p build
           xcodebuild archive \
             -project Folium.xcodeproj \
-            -scheme Folium \
+            -scheme "${{ steps.scheme.outputs.name }}" \
             -configuration Release \
             -destination 'generic/platform=iOS' \
             -archivePath build/Folium.xcarchive \
+            -skipPackagePluginValidation \
+            -skipMacroValidation \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
