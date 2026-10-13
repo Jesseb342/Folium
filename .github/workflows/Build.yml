@@ -103,6 +103,14 @@ jobs:
           open(os.environ["GITHUB_OUTPUT"], "a").write(f"name={pick}\n")
           PY
 
+      # nihstro (inside SharedDependencies) compiles from source and needs the
+      # Boost headers (fusion, spirit, phoenix), which aren't in the checkout.
+      - name: Install Boost headers
+        run: |
+          brew install boost
+          echo "BOOST_INC=$(brew --prefix boost)/include" >> "$GITHUB_ENV"
+          ls "$(brew --prefix boost)/include/boost/fusion/include/adapt_struct.hpp"
+
       - name: Archive (unsigned)
         run: |
           set -o pipefail
@@ -115,12 +123,15 @@ jobs:
             -archivePath build/Folium.xcarchive \
             -skipPackagePluginValidation \
             -skipMacroValidation \
+            HEADER_SEARCH_PATHS="\$(inherited) $BOOST_INC" \
+            OTHER_CPLUSPLUSFLAGS="\$(inherited) -isystem $BOOST_INC" \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             | tee build/xcodebuild.log
         env:
           NSUnbufferedIO: YES
+          CPLUS_INCLUDE_PATH: ${{ env.BOOST_INC }}
 
       - name: Show compile errors
         if: failure()
