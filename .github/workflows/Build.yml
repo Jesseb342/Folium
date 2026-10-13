@@ -125,7 +125,14 @@ jobs:
       - name: Show compile errors
         if: failure()
         run: |
-          grep -n -B1 -A6 "error:" build/xcodebuild.log | head -200 || true
+          {
+            echo '### Compile errors'
+            echo '```'
+            grep -n -E "(fatal error|error):" build/xcodebuild.log | grep -v "ARCHIVE FAILED" | head -40
+            echo '--- context around preprocessor.cpp ---'
+            grep -n -B2 -A12 "preprocessor.cpp:[0-9]" build/xcodebuild.log | head -80
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Verify archive exists
         run: ls -R build/Folium.xcarchive/Products/Applications
